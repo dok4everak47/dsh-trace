@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.direnv/
+.DS_Store
+*.log
+
+# 真实会话日志只在本机用, 永不入库 (含路径/密钥片段)
+test/fixtures/private/
+
+# 报告产物
+out/
