@@ -7,7 +7,7 @@ A DSH session is a compressed, append-only event log (`session.jsonl.zstd`, thou
 - **ingest** — decompress and normalize a session into a flat, versioned *tape*
 - **report** — decompose every turn's prompt tokens into context re-sent (`carried`) versus new content (`fresh`), then attribute the new content back to the tools that produced it
 - **replay** — re-execute side-effect-free tools (`read`, `glob`, `grep`) and report where the recording and the filesystem now disagree
-- **diff** — align two runs of the same task and show where they diverge
+- **diff** — align two runs of the same task on the tool-call sequence and show where the plan diverged, and where only the arguments drifted
 
 Status: **pre-alpha, day 0.** The scope and the seven-day plan live in [TODO.md](./TODO.md) and [TASKS.md](./TASKS.md).
 
@@ -25,6 +25,7 @@ pnpm install
 pnpm build
 pnpm dsh-trace ingest ~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd
 pnpm dsh-trace report ~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd
+pnpm dsh-trace diff <a.jsonl.zstd> <b.jsonl.zstd>
 ```
 
 `report` answers the only question that matters about an expensive session: how

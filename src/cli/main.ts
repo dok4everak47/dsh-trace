@@ -10,18 +10,22 @@ import { readSession } from '../ingest/read.ts'
 import type { Tape } from '../model/tape.ts'
 import { attributeSession, formatTokens, share } from '../report/attribute.ts'
 import type { SessionAttribution } from '../report/attribute.ts'
+import { diffTapes } from '../report/diff.ts'
+import type { CallRef, DiffOp, DiffResult } from '../report/diff.ts'
 
 const USAGE = `dsh-trace — offline trace for DeepSeek Harness agent sessions
 
 Usage:
   dsh-trace ingest <session.jsonl.zstd> [--json] [--quiet]
   dsh-trace report <session.jsonl.zstd> [--json] [--turns N] [--tools N]
+  dsh-trace diff <a.jsonl.zstd> <b.jsonl.zstd> [--json] [--limit N]
 
 Options:
   --json     print machine-readable output
   --quiet    suppress tables, keep the summary
   --turns N  how many turns to list (default 10)
   --tools N  how many tools to list (default 10)
+  --limit N  how many divergences to list (default 10)
 `
 
 function pad(value: string, width: number): string {
@@ -159,20 +163,86 @@ function renderGrid(header: string[], rows: string[][], rightAligned: Set<number
   return [format(header), ...rows.map(format)].join('\n')
 }
 
+function describeCall(ref: CallRef | undefined): string {
+  if (ref === undefined) return '(none)'
+  return `#${ref.index} t${ref.turn}/s${ref.step} ${ref.name} ${ref.args}`
+}
+
+function describeOp(op: DiffOp, side: 'a' | 'b'): string {
+  switch (op.type) {
+    case 'identical':
+    case 'drifted':
+      return describeCall(side === 'a' ? op.a : op.b)
+    case 'a-only':
+      return side === 'a' ? describeCall(op.a) : '(nothing)'
+    case 'b-only':
+      return side === 'b' ? describeCall(op.b) : '(nothing)'
+  }
+}
+
+export function renderDiff(result: DiffResult): string {
+  const out: string[] = []
+  out.push(`a: ${result.a.id}  (${result.a.calls} calls)`)
+  out.push(`b: ${result.b.id}  (${result.b.calls} calls)`)
+  out.push('')
+  out.push(
+    `tool sequence: matched ${result.matched} · identical ${result.identical}` +
+      ` · drifted ${result.matched - result.identical} · a-only ${result.aOnly} · b-only ${result.bOnly}` +
+      `${result.approximate ? ' · approximate' : ''}`
+  )
+
+  if (result.firstStructural === null) out.push('tool sequences agree')
+  else {
+    const op = result.firstStructural
+    out.push('')
+    out.push('first structural divergence:')
+    out.push(`  a: ${describeOp(op, 'a')}`)
+    out.push(`  b: ${describeOp(op, 'b')}`)
+  }
+
+  if (result.firstDrift !== null) {
+    const op = result.firstDrift
+    out.push('')
+    out.push('first argument drift:')
+    out.push(`  a: ${describeOp(op, 'a')}`)
+    out.push(`  b: ${describeOp(op, 'b')}`)
+  }
+
+  const differing = result.ops.filter((op) => op.type !== 'identical').slice(0, 5)
+  if (differing.length > 0) {
+    out.push('')
+    out.push('first differing calls:')
+    for (const op of differing) {
+      out.push(`  [${op.type}] a: ${describeOp(op, 'a')}`)
+      out.push(`            b: ${describeOp(op, 'b')}`)
+    }
+  }
+
+  const rows = result.turns.map((row) => [
+    String(row.turn),
+    `${row.a?.steps ?? '-'} / ${row.b?.steps ?? '-'}`,
+    `${row.a === null ? '-' : formatTokens(row.a.prompt)} / ${row.b === null ? '-' : formatTokens(row.b.prompt)}`,
+  ])
+  out.push('')
+  out.push(renderGrid(['turn', 'steps a/b', 'prompt a/b'], rows, new Set()))
+  return out.join('\n')
+}
+
 export async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv
   if (command === undefined || command === '--help' || command === '-h' || command === 'help') {
     process.stdout.write(USAGE)
     return command === undefined ? 2 : 0
   }
-  if (command !== 'ingest' && command !== 'report') {
+  if (command !== 'ingest' && command !== 'report' && command !== 'diff') {
     process.stderr.write(`unknown command: ${command}\n\n${USAGE}`)
     return 2
   }
 
   const json = rest.includes('--json')
   const quiet = rest.includes('--quiet')
-  const path = rest.find((arg) => !arg.startsWith('-'))
+  const paths = rest.filter((arg, index) => !arg.startsWith('-') && !(index > 0 && rest[index - 1]?.startsWith('--')))
+  const path = paths[0]
   const numberArg = (flag: string, fallback: number): number => {
     const index = rest.indexOf(flag)
     const raw = index >= 0 ? rest[index + 1] : undefined
@@ -182,6 +252,30 @@ export async function main(argv: string[]): Promise<number> {
   if (path === undefined) {
     process.stderr.write(`missing session path\n\n${USAGE}`)
     return 2
+  }
+
+  if (command === 'diff') {
+    const [, second] = paths
+    if (second === undefined) {
+      process.stderr.write(`diff needs two session paths\n\n${USAGE}`)
+      return 2
+    }
+    let left: Tape
+    let right: Tape
+    try {
+      left = await readSession(path!)
+      right = await readSession(second)
+    } catch (error) {
+      process.stderr.write(`${(error as Error).message}\n`)
+      return 1
+    }
+    const result = diffTapes(left, right, { limit: numberArg('--limit', 10) })
+    if (json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
+      return 0
+    }
+    process.stdout.write(`${renderDiff(result)}\n`)
+    return 0
   }
 
   let tape: Tape

@@ -51,6 +51,7 @@
 - **D-004 归一化唯一入口 `src/model/`。** 其他模块只见 tape 类型，防止 schema 变更污染全仓。
 - **D-005 HTML 报告优先于 TUI 面板。** 理由同上，可分享 > 好用。
 - **D-006 归因口径改用 prompt token（uncached + cacheRead），不做五分类。** 原计划按 system / 指令 / skills / 历史 / 工具结果拆分，实测不可行：v4 的 `request/header` 根本不含 system prompt，而 `inputTokens` 只是未命中缓存的那一小片——直接拿它当上下文大小，会在缓存未命中的那一步凭空造出几十万 token 的跳变（第一版报告因此把 bash 算成 557%）。改成：`prompt = inputTokens + cacheReadTokens`，每步价格分解为 carried（重发）+ fresh（新增），fresh 再按字符比例归到工具与 assistant 消息，解释不了的计入 unattributed。
+- **D-007 diff 按工具名对齐，不按参数 hash 对齐。** 原计划用"工具名 + 参数 hash"当对齐键，实测在真实会话对上几乎全不匹配——同一任务两次运行连 `ls -la` 的参数都会变（绝对路径、`head -80`/`head -100`、描述文本）。改成按工具名做 LCS，再逐对比较规范化参数，输出 identical / drifted / a-only / b-only 三级。易变字段（description / timeout）在比较前剔除。
 
 ## 待定
 
