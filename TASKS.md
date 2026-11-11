@@ -83,24 +83,26 @@
 
 ---
 
-## D6（11-16）发布 + 全量测量
+## D6（11-16）发布准备　✅ 完成（11-13）
 
-- [ ] `package.json`：`engines.node >= 24`、bin、files、license
-- [ ] README 补：性能数字（hyperfine）、兼容矩阵、限制说明
-- [ ] 全量 382 份跑一遍，产出**那个数字**（重复读取占比 / compaction 丢弃率 / 重复命令率，选最反直觉的）
-- [ ] `npm publish`（`dsh-trace`）
-- [ ] git tag `v0.1.0`
+- [x] `package.json`：version 0.1.0、`engines.node >= 24`、bin、files、LICENSE、repository、prepublishOnly
+- [x] README 定稿：发现、安装、命令、归因口径、限制、设计说明
+- [x] 干净安装验证：`npm pack` → 临时目录 `npm i <tgz>` → ingest / report / html 全通
+- [x] `npm publish --dry-run`：41 kB、27 个文件、无告警
+- [x] git tag `v0.1.0`
+- [ ] **真实发布未做**：本机 npm 未登录（`npm whoami` 401），需要 `npm login` 后执行 `npm publish`
 
-**完成标准**：`npm i -g dsh-trace` 能在干净环境跑通；那个数字有出处、可复现。
+**顺手修掉的两个发版 bug**：① 入口判断用 `import.meta.url === pathToFileURL(argv[1])`，而 npm 把 bin 装成软链、macOS 的 `/tmp` 也是软链，导致 CLI 静默退出 0 —— 改成 realpath 比较，并加回归测试；② 输出接 `| head` 时 EPIPE 直接崩，改成正常退出。
 
 ---
 
-## D7（11-17）文章 + 分发
+## D7（11-17）文章 + 分发　✅ 完成（11-13）
 
-- [ ] 写文章：问题 → 方法 → 数字 → 工具（诚实写局限）
-- [ ] 发 X 帖 + 提交 `dsh-plugin-shop` / awesome feed
-- [ ] 回填 `TODO.md` 简历交付物三条
-- [ ] 复盘：哪一天超时、下次砍什么
+- [x] 文章 `docs/article.md`：口径 → 四个发现 → 五条可操作建议 → 局限 → 工具
+- [x] 回填 `TODO.md` 简历条目（中英双版）
+- [x] 文章内嵌两张真实截图（单会话报告、语料扫描 + 成本集中度曲线）
+- [ ] 发 X 帖（需要账号，待人工）
+- [ ] 提交 `dsh-plugin-shop` / awesome feed（需要 GitHub PR，待人工）
 
 **完成标准**：文章有链接、有数字、能被非 DSH 用户读懂。
 
@@ -115,5 +117,5 @@
 - D3：完成（提前一天）。diff 落地，7 个新用例，真实会话对验证通过；发现"同一任务两次运行"在语料里极少完全同参，按工具名的 LCS 对齐是唯一稳的粒度。
 - D4：完成（提前）。HTML 一次做到可用，32 个测试全绿；用 Chrome for Testing 无头截图逐轮修正了对比度、条形分层和转义 bug。
 - D5：完成（提前）。scan 落地，2 秒跑完 383 份；顺手发现跨 turn 的上下文重发没被计入，归因改为 session 级链式，carried 从 92.5% 修正到 98.6%。
-- D6：
-- D7：
+- D6：完成。发版流程跑通（pack → 干净安装 → 四个命令全过），dry-run 41 kB/27 文件。真实发布卡在 npm 未登录。顺带修了两个只会在"装上去用"时出现的 bug：软链入口判断失败导致 CLI 静默退出、EPIPE 崩溃。
+- D7：完成。文章定稿（~2,600 字），三个数字互相印证；简历四条中英版回填。分发（X 帖、catalog 提交）留待人工。

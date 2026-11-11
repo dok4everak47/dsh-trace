@@ -93,6 +93,10 @@ td.num, th.num { text-align: right; }
 .findings li { position: relative; padding: 9px 0 9px 22px; border-bottom: 1px solid #151a21; color: #c8d0da; }
 .findings li::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
 .findings b { color: var(--ink); font-weight: 600; }
+.curve { display: grid; grid-template-columns: 1fr 260px; gap: 28px; align-items: center; }
+.curve svg { width: 100%; height: auto; display: block; }
+.curve .note { color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.curve .note b { color: var(--ink); font-weight: 600; }
 footer { margin-top: 56px; color: #5c6572; font-size: 11.5px; display: flex; justify-content: space-between; gap: 20px; }
 `
 
@@ -278,6 +282,7 @@ export function renderScanHtml(result: ScanResult, options: ScanHtmlOptions = {}
     )
     .join('')
 
+  const curveSvg = renderCurve(result.curve)
   const maxTool = Math.max(1, ...result.tools.map((tool) => tool.amplifiedTokens))
   const toolRows = result.tools
     .slice(0, 10)
@@ -335,6 +340,19 @@ export function renderScanHtml(result: ScanResult, options: ScanHtmlOptions = {}
 </section>
 
 <section>
+  <h2>Where the cost concentrates</h2>
+  <div class="curve">
+    ${curveSvg}
+    <div class="note">
+      Turns sorted from most to least expensive; the line is the cumulative share of
+      all prompt tokens. A straight diagonal would mean cost is spread evenly.
+      Here the <b>top 10% of turns</b> account for <b>${(result.concentration * 100).toFixed(1)}%</b>
+      of everything processed.
+    </div>
+  </div>
+</section>
+
+<section>
   <h2>Cost by tool · prompt tokens attributable, including re-reads</h2>
   ${toolRows}
 </section>
@@ -375,4 +393,39 @@ ${
 </footer>
 </body>
 </html>`
+}
+
+/** Cumulative-cost curve as plain SVG — no library, no canvas, prints fine. */
+function renderCurve(points: Array<{ percent: number; share: number }>): string {
+  const width = 620
+  const height = 240
+  const padLeft = 46
+  const padBottom = 30
+  const padTop = 10
+  const padRight = 12
+  const plotWidth = width - padLeft - padRight
+  const plotHeight = height - padTop - padBottom
+  const x = (percent: number): number => padLeft + (percent / 100) * plotWidth
+  const y = (share: number): number => padTop + plotHeight - Math.min(1, share) * plotHeight
+  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'}${x(point.percent).toFixed(1)},${y(point.share).toFixed(1)}`).join(' ')
+  const area = `${path} L${x(100).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`
+  const marks = [0, 25, 50, 75, 100]
+    .map(
+      (percent) =>
+        `<text x="${x(percent).toFixed(1)}" y="${height - 10}" fill="#8a939f" font-size="11" text-anchor="middle">${percent}%</text>`
+    )
+    .join('')
+  const grid = [0, 0.25, 0.5, 0.75, 1]
+    .map((share) => {
+      const yy = y(share).toFixed(1)
+      return `<line x1="${padLeft}" y1="${yy}" x2="${width - padRight}" y2="${yy}" stroke="#1a1f27" stroke-width="1"/><text x="${padLeft - 8}" y="${(Number(yy) + 3).toFixed(1)}" fill="#8a939f" font-size="10" text-anchor="end">${Math.round(share * 100)}%</text>`
+    })
+    .join('')
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="cumulative share of prompt tokens by turn rank">
+  ${grid}
+  <line x1="${padLeft}" y1="${y(0)}" x2="${x(100).toFixed(1)}" y2="${y(1)}" stroke="#2b323c" stroke-dasharray="4 4" stroke-width="1"/>
+  <path d="${area}" fill="#5eead4" opacity="0.08"/>
+  <path d="${path}" fill="none" stroke="#5eead4" stroke-width="2"/>
+  ${marks}
+</svg>`
 }

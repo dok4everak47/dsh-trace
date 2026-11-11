@@ -82,3 +82,18 @@ test('empty input produces an empty but valid result', async () => {
   assert.deepEqual(result.findings, ['no sessions found'])
   assert.equal(result.concentration, 0)
 })
+
+test('the concentration curve is monotonic and ends at 100%', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-trace-scan-'))
+  await writeSession(root, 'a', 'session.v4.jsonl.zstd', 'session-a', 4, 100, 900)
+  await writeSession(root, 'b', 'session.v4.jsonl.zstd', 'session-b', 2, 100, 4_000)
+
+  const result = await scan(root)
+  assert.equal(result.curve.length, 21, 'sampled every 5 points')
+  assert.equal(result.curve[0]?.percent, 0)
+  assert.equal(result.curve.at(-1)?.percent, 100)
+  assert.ok(Math.abs((result.curve.at(-1)?.share ?? 0) - 1) < 1e-9, 'all tokens accounted for')
+  for (let index = 1; index < result.curve.length; index++) {
+    assert.ok((result.curve[index]?.share ?? 0) >= (result.curve[index - 1]?.share ?? 0), 'cumulative share never decreases')
+  }
+})

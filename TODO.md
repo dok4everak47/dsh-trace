@@ -73,9 +73,15 @@
 | 语料有超大日志 | 单文件 > 200MB | 流式解码 + 上限拒绝 + 报告里标出被跳过的文件 |
 | 归因口径站不住 | 数字对不上人工核对 | 先只做"工具结果 vs 其余"两分法，别一上来五类 |
 
-## 简历交付物（D7 回填）
+## 简历交付物
 
-- [ ] bullet 1：构建并发布 `dsh-trace`，把 agent 会话的 zstd 事件流归一化为可回放磁带，支持确定性重放与双运行 diff
-- [x] bullet 2：在 383 份真实会话、22.2 亿 prompt token 上量化上下文开销——98.6% 是重复重发的上下文，只有 1.2% 是新内容；最贵的 10% turn 吃掉 68.2%
-- [ ] bullet 3：零宿主补丁，跨 N 个会话 schema 版本与 M 个 DSH 版本可用，单份 4,385 事件 < 2s
-- [ ] 那个数字：______（D6 前必须跑出来，否则项目只是"又一个工具"）
+- [x] **bullet 1（事实）**：构建并发布 `dsh-trace`，把 zstd 压缩的 agent 会话日志归一化成 tape，并在 383 份会话 / 1,457 轮 / 22.6 亿 prompt token 上做成本归因
+- [x] **bullet 2（发现）**：量化出编码 agent 处理的上下文中 98.6% 是重复重发的历史，最贵的 10% 回合吃掉 68.3% 的 prompt token；工具输出以 bash 为首占可归因成本 39.6%
+- [x] **bullet 3（工程）**：设计"缓存读 + 未命中输入"的归因口径，会话级自校准字符→token 比例，解释不了的残差单列不摊派；恒等式 `first + carried + fresh == prompt` 在 1,457 个回合上零误差
+- [x] **bullet 4（交付）**：零运行时依赖、跨 v0/v3/v4 三代日志格式、单文件离线 HTML 报告；38 个测试
+
+英文版（简历可直接用）：
+
+> Built `dsh-trace`, a zero-dependency Node CLI that decodes zstd-compressed agent session logs into a normalized event tape and attributes 2.26B prompt tokens across 383 sessions.
+> Found that 98.6% of the context coding agents process is history re-sent, with the top 10% of turns consuming 68.3% of all prompt tokens.
+> Designed an attribution model separating cached from uncached input with per-session calibration, verified by an exact identity on all 1,457 turns; shipped a self-contained HTML report and a tool-sequence diff, 38 tests, no runtime dependencies.

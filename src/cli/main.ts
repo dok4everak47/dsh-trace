@@ -4,8 +4,9 @@
  * and `diff` land on D2–D4 and plug in here.
  */
 
+import { realpathSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { readSession } from '../ingest/read.ts'
 import type { Tape } from '../model/tape.ts'
@@ -425,8 +426,34 @@ export async function main(argv: string[]): Promise<number> {
   return 0
 }
 
-const entry = process.argv[1]
-if (entry !== undefined && import.meta.url === pathToFileURL(entry).href) {
+/**
+ * Is this module the script the user ran?
+ *
+ * The naive `import.meta.url === pathToFileURL(process.argv[1])` check is wrong
+ * twice over: npm installs the bin as a symlink, and macOS symlinks /tmp to
+ * /private/tmp. Both make the two paths differ textually while pointing at the
+ * same file, so the CLI would exit silently with status 0. Compare real paths.
+ */
+export function isEntryPoint(entry: string | undefined, moduleUrl: string): boolean {
+  if (entry === undefined) return false
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(moduleUrl))
+  } catch {
+    return moduleUrl === pathToFileURL(entry).href
+  }
+}
+
+/** A closed pipe (`| head`) is a normal way to stop a CLI, not a crash. */
+function ignoreEpipe(stream: NodeJS.WriteStream): void {
+  stream.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EPIPE') process.exit(0)
+    throw error
+  })
+}
+
+if (isEntryPoint(process.argv[1], import.meta.url)) {
+  ignoreEpipe(process.stdout)
+  ignoreEpipe(process.stderr)
   const code = await main(process.argv.slice(2))
   process.exitCode = code
 }

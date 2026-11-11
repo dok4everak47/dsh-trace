@@ -59,6 +59,12 @@ export interface ScanResult {
   turnPrompt: { p50: number; p90: number; p99: number; max: number }
   /** Share of all prompt tokens taken by the most expensive 10% of turns. */
   concentration: number
+  /**
+   * Cumulative share of prompt tokens taken by the most expensive `percent`% of
+   * turns, sampled every 5 points. The straighter this line bends toward the
+   * corner, the more the cost concentrates in a handful of turns.
+   */
+  curve: Array<{ percent: number; share: number }>
   findings: string[]
 }
 
@@ -253,6 +259,14 @@ export async function scan(root: string, options: { concurrency?: number; top?: 
   const topTenth = sortedTurns.slice(0, Math.max(1, Math.floor(sortedTurns.length / 10)))
   const topTenthSum = topTenth.reduce((sum, value) => sum + value, 0)
 
+  const curve: Array<{ percent: number; share: number }> = []
+  const totalPrompt = totals.prompt
+  for (let percent = 0; percent <= 100; percent += 5) {
+    const take = Math.max(1, Math.round((sortedTurns.length * percent) / 100))
+    const taken = sortedTurns.slice(0, take).reduce((sum, value) => sum + value, 0)
+    curve.push({ percent, share: totalPrompt === 0 ? 0 : taken / totalPrompt })
+  }
+
   const partial: Omit<ScanResult, 'findings'> = {
     totals,
     tools: [...tools.values()].sort((a, b) => b.amplifiedTokens - a.amplifiedTokens),
@@ -265,6 +279,7 @@ export async function scan(root: string, options: { concurrency?: number; top?: 
       max: sortedTurns[0] ?? 0,
     },
     concentration: totals.prompt === 0 ? 0 : topTenthSum / totals.prompt,
+    curve,
   }
 
   return { ...partial, findings: buildFindings(partial) }

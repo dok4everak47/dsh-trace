@@ -76,3 +76,20 @@ test('a file without a header is rejected with its path', async () => {
   await writeFile(path, `${turnStart}\n${turnEnd}\n`)
   await assert.rejects(readSession(path), /no session header/)
 })
+
+test('the CLI entry point survives symlinked invocation', async () => {
+  const { isEntryPoint } = await import('../src/cli/main.ts')
+  const { symlink } = await import('node:fs/promises')
+  const { pathToFileURL } = await import('node:url')
+
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-trace-entry-'))
+  const real = join(dir, 'main.js')
+  const link = join(dir, 'dsh-trace')
+  await writeFile(real, '// entry\n')
+  await symlink(real, link)
+
+  assert.equal(isEntryPoint(real, pathToFileURL(real).href), true)
+  assert.equal(isEntryPoint(link, pathToFileURL(real).href), true, 'symlinked bin still counts')
+  assert.equal(isEntryPoint(undefined, pathToFileURL(real).href), false)
+  assert.equal(isEntryPoint(join(dir, 'other.js'), pathToFileURL(real).href), false)
+})

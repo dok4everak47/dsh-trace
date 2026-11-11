@@ -1,14 +1,16 @@
 {
   "name": "dsh-trace",
-  "version": "0.0.0",
-  "description": "Offline trace, replay and diff for DeepSeek Harness agent sessions",
+  "version": "0.1.0",
+  "description": "Offline trace, cost attribution and diff for DeepSeek Harness agent sessions",
   "type": "module",
   "license": "MIT",
   "bin": {
     "dsh-trace": "./dist/cli/main.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=24"
@@ -17,10 +19,30 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.check.json",
     "test": "node --test test/*.test.ts",
-    "dev": "node src/cli/main.ts"
+    "dev": "node src/cli/main.ts",
+    "prepublishOnly": "pnpm build && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "agent",
+    "observability",
+    "trace",
+    "tokens",
+    "zstd",
+    "cli"
+  ],
+  "author": "dok4ever",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dok4ever/dsh-trace.git"
+  },
+  "homepage": "https://github.com/dok4ever/dsh-trace",
+  "bugs": {
+    "url": "https://github.com/dok4ever/dsh-trace/issues"
   }
 }
