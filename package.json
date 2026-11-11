@@ -1,0 +1,26 @@
+{
+  "name": "dsh-trace",
+  "version": "0.0.0",
+  "description": "Offline trace, replay and diff for DeepSeek Harness agent sessions",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "dsh-trace": "./dist/cli/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "test": "node --test test/*.test.ts",
+    "dev": "node src/cli/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

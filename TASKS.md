@@ -9,12 +9,12 @@
 
 ## D1（11-11）ingest：能解压、能归一化
 
-- [ ] `pnpm init` + TS 工程骨架（`tsconfig.json`、`src/`、`test/`、`justfile`）
-- [ ] `src/ingest/read.ts`：zstd 解码 + JSONL 逐行解析，坏行计数不抛
-- [ ] `src/model/tape.ts`：tape 类型（session / turn / step / tool-call / tool-result / message / chunk）
-- [ ] `src/model/normalize.ts`：raw 事件 → tape，唯一的归一化入口
-- [ ] `src/cli/main.ts`：`dsh-trace ingest <path> [--json]`，默认打 turn/tool/token 表
-- [ ] 单测：1 份脱敏 fixture + 坏行用例
+- [x] `pnpm init` + TS 工程骨架（`tsconfig.json`、`tsconfig.check.json`、`src/`、`test/`、`justfile`）
+- [x] `src/ingest/read.ts`：zstd 流式解码 + JSONL 逐行解析，坏行计数不抛
+- [x] `src/model/tape.ts`：tape 类型（session / turn / step / tool-call / message / context）
+- [x] `src/model/normalize.ts`：raw 事件 → tape，唯一的归一化入口
+- [x] `src/cli/main.ts`：`dsh-trace ingest <path> [--json]`，默认打 turn/tool/token 表
+- [x] 单测：13 个用例，覆盖 v0/v4 两种形状、坏行、无 header、usage 不重复计数
 
 **完成标准**：在本机 3 份真实会话（含 1 份老的 `session.jsonl.zstd`）上跑通，打出的 turn 数与 `turn/start` 事件数一致。
 
@@ -91,7 +91,7 @@
 
 > 一天结束填一行：做完什么、卡在哪、是否触发降级。
 
-- D1：
+- D1：完成。全量 383 份跑通（0 失败、0 坏行、289,334 事件、3.4s、RSS 236MB）；v0/v3/v4 抽样 turn 数与 `turn/start` 全部一致（72/72、3/3、0/0）。最大单份 7,572 事件 291ms。发现两套 schema 差异：v4 的 usage 在 `assistant/message.data.usage`、tool 结果文本直接挂在 content item 上、header 不含 system prompt（改由 `request/context` 给 provider/model/contextWindow）。
 - D2：
 - D3：
 - D4：

@@ -39,12 +39,13 @@ test/              单测按模块平行放置
 direnv allow            # 首次
 nix develop             # 不开 direnv 时
 pnpm install
-pnpm build              # tsc
-pnpm test               # node --test
-pnpm dsh-trace ...      # 直接跑构建产物
+just test               # node --test test/*.test.ts（直接跑 TS，无需构建）
+just check              # tsc 类型检查（src + test）
+pnpm build              # 产出 dist/，发布用
+node src/cli/main.ts ingest <path>   # 开发时直接跑
 ```
 
-`justfile` 尚未建立（D1 补），届时 `just --list` 看常用组合。
+`justfile` 里是常用组合，`just --list` 看。
 
 ## 代码约定
 
@@ -59,7 +60,7 @@ pnpm dsh-trace ...      # 直接跑构建产物
 
 一个任务算完成，要同时满足：
 
-1. `pnpm test` 绿，且有覆盖该行为的用例；
+1. `just test` 绿，且有覆盖该行为的用例；
 2. 在**至少一份真实会话**上跑通（结果贴进 PR/commit 描述或 `TASKS.md` 当日记录）；
 3. `package.json` 依赖数没有增加（除非 TODO 里有决策记录）；
 4. 没有新增对宿主内部结构的假设。
@@ -74,8 +75,10 @@ pnpm dsh-trace ...      # 直接跑构建产物
 ## 已知事实（省得重新查）
 
 - 日志路径：`~/.dsh/sessions/<workspace-slug>/<session-id>/session.v4.jsonl.zstd`；老会话是 `session.jsonl.zstd`。两者都是 zstd 压缩的 JSONL。
-- 本机语料：**382 份**、压缩后 **137MB**、33 份超过 1MB。单份最大样本 4,385 个事件。
+- 本机语料：**383 份**（v4 215 / v0 166 / v3 2）、压缩后 **137MB**、33 份超过 1MB。单份最大样本 7,572 个事件。
+- 全量 ingest 基线（D1 实测）：383/383 成功、**289,334** 事件、0 坏行、3.4s、RSS 236MB；共 1,554 turn、16,405 次工具调用、2,907 万字符工具输出、1.15 亿输入 token。
 - 事件类型（按出现频次）：`reasoning-chunks`、`assistant/chunk`、`tool-call-chunks`、`tool/code-dispatch-start`、`tool/code-dispatch`、`text-chunks`、`step/start`、`assistant/message`、`step/end`、`tool/call`、`tool/result`、`agent/inbox/spliced`、`user/message`、`turn/start`、`turn/end`。
 - 首行是 `{"type":"session","version":0,"id":...}`，之后每行带 `seq` 和 `time`（epoch ms）。
 - 单份样本里 `reasoning-chunks` 占全部事件的 **50%** — 归一化时先按类型分流，别把流式 chunk 当普通事件逐条建对象。
 - 解压验证过的读法：`zstdDecompressSync(readFileSync(path))` → UTF-8 → 按 `\n` 切 → 逐行 `JSON.parse`。
+- **v0 与 v4 的三处差异**（D1 实测，归一化已兼容）：① token 用量 v0 走 `assistant/chunk` 的 `chunk.type=usage`，v4 挂在 `assistant/message.data.usage`（同一次请求 `step/end` 也会带，只取一次）；② 工具结果文本 v0 嵌在 `content[].content[].text`，v4 直接是 `content[].text`；③ v4 的 `request/header` 不含 system prompt，provider/model/contextWindow 改由 `request/context` 提供。
