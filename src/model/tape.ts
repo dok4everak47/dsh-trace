@@ -9,8 +9,14 @@
  */
 
 export interface TapeUsage {
+  /**
+   * Uncached input tokens — what gets billed at full rate. On providers with
+   * prompt caching this is far smaller than the context actually processed.
+   */
   inputTokens: number
   outputTokens: number
+  /** Context served from the provider's prompt cache; billed cheaper, still re-read. */
+  cacheReadTokens: number
 }
 
 export interface TapeSession {
@@ -105,10 +111,22 @@ export interface Tape {
 }
 
 export function emptyUsage(): TapeUsage {
-  return { inputTokens: 0, outputTokens: 0 }
+  return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }
 }
 
 export function addUsage(into: TapeUsage, usage: TapeUsage): void {
   into.inputTokens += usage.inputTokens
   into.outputTokens += usage.outputTokens
+  into.cacheReadTokens += usage.cacheReadTokens
+}
+
+/**
+ * How much context the model actually processed: uncached input plus whatever
+ * the cache served. This — not `inputTokens` — is the number that tracks
+ * conversation size, and the one attribution must be built on. Using
+ * `inputTokens` alone produces phantom jumps of hundreds of thousands of tokens
+ * whenever the cache misses, which is how the first version of this report lied.
+ */
+export function promptTokens(usage: TapeUsage): number {
+  return usage.inputTokens + usage.cacheReadTokens
 }

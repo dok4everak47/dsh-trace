@@ -45,7 +45,7 @@ test('v0 shape: streamed usage and nested tool-result content', () => {
 
   assert.equal(tape.turns.length, 1)
   assert.equal(tape.turns[0]?.turn, 1)
-  assert.deepEqual(tape.turns[0]?.usage, { inputTokens: 100, outputTokens: 20 })
+  assert.deepEqual(tape.turns[0]?.usage, { inputTokens: 100, outputTokens: 20, cacheReadTokens: 0 })
   assert.equal(tape.turns[0]?.reason, 'stop')
   assert.equal(tape.toolCalls.length, 1)
   assert.equal(tape.toolCalls[0]?.resultChars, 'hello world'.length)
@@ -92,7 +92,7 @@ test('v4 shape: usage on the assembled message, text on the result item', () => 
 
   const tape = builder.finish()
 
-  assert.deepEqual(tape.turns[0]?.usage, { inputTokens: 13_009, outputTokens: 98 })
+  assert.deepEqual(tape.turns[0]?.usage, { inputTokens: 13_009, outputTokens: 98, cacheReadTokens: 0 })
   assert.equal(tape.toolCalls.length, 1, 'tool call registered from assistant/message content')
   assert.equal(tape.toolCalls[0]?.resultChars, 'HTTP 200 OK'.length)
   const assistant = tape.messages.find((message) => message.kind === 'assistant')
@@ -111,7 +111,7 @@ test('usage from streamed chunks accumulates, assembled usage does not double co
   builder.push(chunk(10, 1))
   builder.push(chunk(10, 2))
   const tape = builder.finish()
-  assert.deepEqual(tape.turns[0]?.usage, { inputTokens: 20, outputTokens: 3 })
+  assert.deepEqual(tape.turns[0]?.usage, { inputTokens: 20, outputTokens: 3, cacheReadTokens: 0 })
 })
 
 test('request/header and request/context fill the context block', () => {

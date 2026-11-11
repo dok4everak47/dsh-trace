@@ -8,15 +8,20 @@ import { pathToFileURL } from 'node:url'
 
 import { readSession } from '../ingest/read.ts'
 import type { Tape } from '../model/tape.ts'
+import { attributeSession, formatTokens, share } from '../report/attribute.ts'
+import type { SessionAttribution } from '../report/attribute.ts'
 
 const USAGE = `dsh-trace — offline trace for DeepSeek Harness agent sessions
 
 Usage:
   dsh-trace ingest <session.jsonl.zstd> [--json] [--quiet]
+  dsh-trace report <session.jsonl.zstd> [--json] [--turns N] [--tools N]
 
 Options:
-  --json    print the normalized tape as JSON
-  --quiet   suppress the per-turn table, keep the summary
+  --json     print machine-readable output
+  --quiet    suppress tables, keep the summary
+  --turns N  how many turns to list (default 10)
+  --tools N  how many tools to list (default 10)
 `
 
 function pad(value: string, width: number): string {
@@ -93,13 +98,74 @@ export function summary(tape: Tape): string {
   return parts.join(' · ')
 }
 
+export function renderReport(tape: Tape, attribution: SessionAttribution, options: { turns: number; tools: number }): string {
+  const totals = attribution.totals
+  const out: string[] = []
+  out.push(
+    `prompt ${formatTokens(totals.prompt)} · carried ${formatTokens(totals.carried)} (${share(totals.carried, totals.prompt)})` +
+      ` · fresh ${formatTokens(totals.fresh)} (${share(totals.fresh, totals.prompt)})` +
+      ` · uncached ${formatTokens(totals.uncached)} (${share(totals.uncached, totals.prompt)})`
+  )
+  out.push(
+    `output ${formatTokens(totals.output)} · unattributed ${formatTokens(totals.unattributed)}` +
+      ` · chars→tokens ${attribution.calibration.tokensPerChar.toFixed(2)} (n=${attribution.calibration.samples})` +
+      ` · evicted ${formatTokens(totals.evicted)}` +
+      ` · peak context ${formatTokens(totals.peakPrompt)} · cache misses ${totals.cacheMisses}` +
+      ` · ${totals.turns} turns / ${totals.steps} steps`
+  )
+
+  const turnRows = attribution.turns.slice(0, options.turns).map((turn) => [
+    String(turn.turn),
+    formatTokens(turn.prompt),
+    formatTokens(turn.carried),
+    formatTokens(turn.fresh),
+    String(turn.steps),
+    formatTokens(turn.peakPrompt),
+    turn.cacheMisses > 0 ? String(turn.cacheMisses) : '-',
+    turn.topTool === null ? '-' : `${turn.topTool.name} ${formatTokens(turn.topTool.amplified)}`,
+  ])
+  out.push('')
+  out.push(renderGrid(['turn', 'prompt', 'carried', 'fresh', 'steps', 'peak', 'miss', 'top tool'], turnRows, new Set([4, 6])))
+
+  const toolRows = attribution.tools.slice(0, options.tools).map((tool) => [
+    tool.name,
+    String(tool.calls),
+    formatTokens(tool.resultChars),
+    formatTokens(tool.freshTokens),
+    formatTokens(tool.amplifiedTokens),
+    share(tool.amplifiedTokens, totals.prompt),
+    tool.errors > 0 ? String(tool.errors) : '-',
+  ])
+  out.push('')
+  out.push(renderGrid(['tool', 'calls', 'chars', 'fresh', 'amplified', 'of prompt', 'errors'], toolRows, new Set([1, 6])))
+
+  if (attribution.repeats.length > 0) {
+    out.push('')
+    out.push(`repeated file reads (${attribution.repeats.length}):`)
+    for (const repeat of attribution.repeats.slice(0, options.tools)) {
+      out.push(`  ${repeat.reads}x  ${formatTokens(repeat.chars)} chars  ${repeat.tools.join('+')}  ${repeat.path}`)
+    }
+  }
+  return out.join('\n')
+}
+
+function renderGrid(header: string[], rows: string[][], rightAligned: Set<number>): string {
+  const widths = header.map((title, index) => Math.max(title.length, ...rows.map((row) => row[index]?.length ?? 0)))
+  const format = (cells: string[]): string =>
+    cells
+      .map((cell, index) => (rightAligned.has(index) ? padStart(cell, widths[index] ?? 0) : pad(cell, widths[index] ?? 0)))
+      .join('  ')
+      .trimEnd()
+  return [format(header), ...rows.map(format)].join('\n')
+}
+
 export async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv
   if (command === undefined || command === '--help' || command === '-h' || command === 'help') {
     process.stdout.write(USAGE)
     return command === undefined ? 2 : 0
   }
-  if (command !== 'ingest') {
+  if (command !== 'ingest' && command !== 'report') {
     process.stderr.write(`unknown command: ${command}\n\n${USAGE}`)
     return 2
   }
@@ -107,6 +173,12 @@ export async function main(argv: string[]): Promise<number> {
   const json = rest.includes('--json')
   const quiet = rest.includes('--quiet')
   const path = rest.find((arg) => !arg.startsWith('-'))
+  const numberArg = (flag: string, fallback: number): number => {
+    const index = rest.indexOf(flag)
+    const raw = index >= 0 ? rest[index + 1] : undefined
+    const parsed = raw === undefined ? Number.NaN : Number.parseInt(raw, 10)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  }
   if (path === undefined) {
     process.stderr.write(`missing session path\n\n${USAGE}`)
     return 2
@@ -120,6 +192,19 @@ export async function main(argv: string[]): Promise<number> {
   } catch (error) {
     process.stderr.write(`${(error as Error).message}\n`)
     return 1
+  }
+
+  if (command === 'report') {
+    const attribution = attributeSession(tape)
+    if (json) {
+      process.stdout.write(`${JSON.stringify(attribution, null, 2)}\n`)
+      return 0
+    }
+    process.stdout.write(
+      `${tape.session.id}  ${tape.session.cwd}  schema=v${tape.session.schemaVersion}\n\n`
+    )
+    process.stdout.write(`${renderReport(tape, attribution, { turns: numberArg('--turns', 10), tools: numberArg('--tools', 10) })}\n`)
+    return 0
   }
 
   if (json) {

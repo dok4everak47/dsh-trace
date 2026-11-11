@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | A1 | ingest 支持 v4 与老式 `session.jsonl.zstd` | 各挑 3 份跑通；坏行跳过并计数，不崩 |
 | A2 | 单份 4,385 事件的会话 < 2s 完成 | `hyperfine` 记录，写进 README |
-| A3 | 归因报告回答"这轮 token 花在哪些类、最大项占比" | 人工核对 1 份会话的 3 个 turn |
+| A3 | 报告回答"多少是重发、多少是新内容、新内容归到谁" | 守恒式 `first + carried + fresh == prompt` 全语料校验；人工核对 2 份会话 5 个 turn |
 | A4 | `replay --verify` 在 ≥3 份真实会话上给出判定，不一致项能归因 | 输出含原因分类，不只是 true/false |
 | A5 | `diff` 能对齐两次运行并指出第一个分叉的 tool call | 用同一任务跑两次的会话对 |
 | A6 | 全量 383 份跑完不 OOM | 流式解码 + 单文件上限（>200MB 拒绝） |
@@ -50,6 +50,7 @@
 - **D-003 zstd 用 `node:zlib` 内置。** 零 native 依赖；代价是 Node ≥ 24，写进 `engines`。
 - **D-004 归一化唯一入口 `src/model/`。** 其他模块只见 tape 类型，防止 schema 变更污染全仓。
 - **D-005 HTML 报告优先于 TUI 面板。** 理由同上，可分享 > 好用。
+- **D-006 归因口径改用 prompt token（uncached + cacheRead），不做五分类。** 原计划按 system / 指令 / skills / 历史 / 工具结果拆分，实测不可行：v4 的 `request/header` 根本不含 system prompt，而 `inputTokens` 只是未命中缓存的那一小片——直接拿它当上下文大小，会在缓存未命中的那一步凭空造出几十万 token 的跳变（第一版报告因此把 bash 算成 557%）。改成：`prompt = inputTokens + cacheReadTokens`，每步价格分解为 carried（重发）+ fresh（新增），fresh 再按字符比例归到工具与 assistant 消息，解释不了的计入 unattributed。
 
 ## 待定
 
@@ -69,6 +70,6 @@
 ## 简历交付物（D7 回填）
 
 - [ ] bullet 1：构建并发布 `dsh-trace`，把 agent 会话的 zstd 事件流归一化为可回放磁带，支持确定性重放与双运行 diff
-- [ ] bullet 2：在 383 份真实会话上量化上下文开销，发现 ______（数字待测）
+- [x] bullet 2：在 383 份真实会话、21.5 亿 prompt token 上量化上下文开销——92.4% 是重复重发的上下文，只有 1.1% 是新内容
 - [ ] bullet 3：零宿主补丁，跨 N 个会话 schema 版本与 M 个 DSH 版本可用，单份 4,385 事件 < 2s
 - [ ] 那个数字：______（D6 前必须跑出来，否则项目只是"又一个工具"）

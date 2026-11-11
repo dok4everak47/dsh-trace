@@ -48,8 +48,13 @@ function usageFrom(value: unknown): TapeUsage | undefined {
   if (!rec) return undefined
   const inputTokens = asNumber(rec['inputTokens'])
   const outputTokens = asNumber(rec['outputTokens'])
-  if (inputTokens === undefined && outputTokens === undefined) return undefined
-  return { inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 }
+  const cacheReadTokens = asNumber(rec['cacheReadTokens'])
+  if (inputTokens === undefined && outputTokens === undefined && cacheReadTokens === undefined) return undefined
+  return {
+    inputTokens: inputTokens ?? 0,
+    outputTokens: outputTokens ?? 0,
+    cacheReadTokens: cacheReadTokens ?? 0,
+  }
 }
 
 /** Concatenates the `text` parts of a message content array. */

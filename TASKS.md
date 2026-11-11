@@ -22,10 +22,10 @@
 
 ## D2（11-12）归因：token 花在哪
 
-- [ ] `src/report/attribute.ts`：把每 turn 的 token 分到 system prompt / 指令文件 / skills / 历史 / 工具结果
-- [ ] 工具结果按 tool 名聚合，统计重复读取（同一路径被读多次）
-- [ ] `dsh-trace report <path>`：文本报告 + `--json`
-- [ ] 单测：构造 tape 验证分类不重不漏（各类之和 = 总量 ± 残差）
+- [x] `src/report/attribute.ts`：carried / fresh / uncached 分解（口径见 TODO D-006）
+- [x] 工具结果按 tool 名聚合，并按"后续重读次数"放大；重复读取按路径聚合
+- [x] `dsh-trace report <path>`：文本报告 + `--json` + `--turns/--tools`
+- [x] 单测：守恒、缓存未命中、重复读取、未归因残差，共 7 个新用例
 
 **完成标准**：报告能回答"这轮花了多少、最大一项占多少"，且和人工核对 3 个 turn 一致。
 
@@ -92,7 +92,7 @@
 > 一天结束填一行：做完什么、卡在哪、是否触发降级。
 
 - D1：完成。全量 383 份跑通（0 失败、0 坏行、289,334 事件、3.4s、RSS 236MB）；v0/v3/v4 抽样 turn 数与 `turn/start` 全部一致（72/72、3/3、0/0）。最大单份 7,572 事件 291ms。发现两套 schema 差异：v4 的 usage 在 `assistant/message.data.usage`、tool 结果文本直接挂在 content item 上、header 不含 system prompt（改由 `request/context` 给 provider/model/contextWindow）。
-- D2：
+- D2：完成。全量 1,444 个 turn 守恒校验 0 不匹配（first + carried + fresh == prompt）。语料合计 prompt 21.5 亿 token，其中 carried 92.4%、fresh 1.1%、uncached 5.4%；817 次缓存未命中，335 个文件被重复读取。手工复核 2 份会话 5 个 turn，与工具输出逐项一致。
 - D3：
 - D4：
 - D5：

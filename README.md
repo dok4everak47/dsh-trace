@@ -5,7 +5,7 @@ Offline trace, replay and diff for [DeepSeek Harness](https://github.com/deepsee
 A DSH session is a compressed, append-only event log (`session.jsonl.zstd`, thousands of events per conversation). It holds everything that actually happened — every tool call, every tool result, every streamed reasoning chunk — and nothing reads it in full. `dsh-trace` turns that log into something you can inspect:
 
 - **ingest** — decompress and normalize a session into a flat, versioned *tape*
-- **attribute** — split each turn's token budget across system prompt, instructions, skills, history and tool output
+- **report** — decompose every turn's prompt tokens into context re-sent (`carried`) versus new content (`fresh`), then attribute the new content back to the tools that produced it
 - **replay** — re-execute side-effect-free tools (`read`, `glob`, `grep`) and report where the recording and the filesystem now disagree
 - **diff** — align two runs of the same task and show where they diverge
 
@@ -24,7 +24,24 @@ direnv allow          # or: nix develop
 pnpm install
 pnpm build
 pnpm dsh-trace ingest ~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd
+pnpm dsh-trace report ~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd
 ```
+
+`report` answers the only question that matters about an expensive session: how
+much of what the model processed was the same context being re-sent, and which
+tool output was responsible for the rest.
+
+```
+prompt 30.60M · carried 29.42M (96.1%) · fresh 945.9k (3.1%) · uncached 2.96M (9.7%)
+output 779.5k · unattributed 168.4k · chars→tokens 0.43 (n=284) · cache misses 21
+
+turn  prompt  carried  fresh   steps  peak    miss  top tool
+3     15.78M  15.39M   364.6k    158  154.8k     7  bash 6.66M
+```
+
+Across 383 local sessions (1,444 turns, 2.15B prompt tokens): **92.4% of what
+the models processed was the same context re-sent, and only 1.1% was new
+content.**
 
 ## Requirements
 
