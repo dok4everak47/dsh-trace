@@ -75,7 +75,8 @@ node src/cli/main.ts ingest <path>   # 开发时直接跑
 
 - 日志路径：`~/.dsh/sessions/<workspace-slug>/<session-id>/session.v4.jsonl.zstd`；老会话是 `session.jsonl.zstd`。两者都是 zstd 压缩的 JSONL。
 - 本机语料：**383 份**（v4 215 / v0 166 / v3 2）、压缩后 **137MB**、33 份超过 1MB。单份最大样本 7,572 个事件。
-- 全量 ingest 基线（D1 实测）：383/383 成功、**289,334** 事件、0 坏行、3.4s、RSS 236MB；共 1,554 turn、16,405 次工具调用、2,907 万字符工具输出、1.15 亿**未命中缓存**的输入 token（另见下条 prompt token 口径）。
+- 全量 scan 基线（D5 实测，链式归因）：383 份 / 1,455 turn / 16,544 step / 16,917 次工具调用 / 292,763 事件；prompt 22.19 亿、carried 98.6%、fresh 1.2%、uncached 1.17 亿、缓存未命中 821；turn 成本 p50 260k / p90 3.85M / p99 21.9M / max 40.1M；最贵 10% turn 占 68.2%；scan 全程 1.96s。
+- 全量 ingest 基线（D1 实测，文件集是 `session*` 通配，比 scan 少 3 份）：383/383 成功、**289,334** 事件、0 坏行、3.4s、RSS 236MB；1,554 turn、16,405 次工具调用、2,907 万字符工具输出、1.15 亿**未命中缓存**的输入 token。
 - 事件类型（按出现频次）：`reasoning-chunks`、`assistant/chunk`、`tool-call-chunks`、`tool/code-dispatch-start`、`tool/code-dispatch`、`text-chunks`、`step/start`、`assistant/message`、`step/end`、`tool/call`、`tool/result`、`agent/inbox/spliced`、`user/message`、`turn/start`、`turn/end`。
 - 首行是 `{"type":"session","version":0,"id":...}`，之后每行带 `seq` 和 `time`（epoch ms）。
 - 单份样本里 `reasoning-chunks` 占全部事件的 **50%** — 归一化时先按类型分流，别把流式 chunk 当普通事件逐条建对象。

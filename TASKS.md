@@ -62,7 +62,18 @@
 
 ---
 
-## D5（11-15）可视化：自包含 HTML
+## D5（11-15）批量扫描：跨会话汇总　✅ 完成（11-13）
+
+- [x] `src/report/scan.ts`：递归发现会话（同目录只取最高 schema 版本），4 路并发读取
+- [x] 汇总：prompt / carried / fresh / uncached / 缓存未命中 / 工具 / 重复读取 / turn 成本分布
+- [x] 派生结论 `findings`：重发占比、成本集中度、缓存代价、最贵工具、最常重读文件
+- [x] `dsh-trace scan <dir> [--json] [--html out.html] [--top N]`
+- [x] 语料级 HTML 页（`docs/scan.png` 是真实输出）
+- [x] 4 个新用例：聚合、同目录去重、坏文件不致命、空目录
+
+**完成标准**：383 份语料 2 秒内跑完，并产出可直接引用的结论。实测 1.96s。
+
+## D5-old（原计划）可视化：自包含 HTML
 
 - [ ] `src/report/html.ts`：单文件 HTML，内联 CSS/JS，无外链
 - [ ] 视图：turn 时间轴 + token 归因条 + 工具调用瀑布 + divergence 标记
@@ -103,6 +114,6 @@
 - D2：完成。全量 1,444 个 turn 守恒校验 0 不匹配（first + carried + fresh == prompt）。语料合计 prompt 21.5 亿 token，其中 carried 92.4%、fresh 1.1%、uncached 5.4%；817 次缓存未命中，335 个文件被重复读取。手工复核 2 份会话 5 个 turn，与工具输出逐项一致。
 - D3：完成（提前一天）。diff 落地，7 个新用例，真实会话对验证通过；发现"同一任务两次运行"在语料里极少完全同参，按工具名的 LCS 对齐是唯一稳的粒度。
 - D4：完成（提前）。HTML 一次做到可用，32 个测试全绿；用 Chrome for Testing 无头截图逐轮修正了对比度、条形分层和转义 bug。
-- D5：
+- D5：完成（提前）。scan 落地，2 秒跑完 383 份；顺手发现跨 turn 的上下文重发没被计入，归因改为 session 级链式，carried 从 92.5% 修正到 98.6%。
 - D6：
 - D7：

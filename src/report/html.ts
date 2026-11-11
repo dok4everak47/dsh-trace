@@ -13,6 +13,7 @@ import type { Tape } from '../model/tape.ts'
 import type { SessionAttribution, TurnAttribution } from './attribute.ts'
 import { formatTokens, share } from './attribute.ts'
 import type { DiffResult } from './diff.ts'
+import type { ScanResult } from './scan.ts'
 
 export interface HtmlOptions {
   title?: string
@@ -88,6 +89,10 @@ td.num, th.num { text-align: right; }
 .diffcard .v { font-size: 20px; margin-top: 4px; }
 .call { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-top: 12px; font-size: 12.5px; }
 .call .side { color: var(--muted); }
+.findings { margin: 0; padding: 0; list-style: none; max-width: 920px; }
+.findings li { position: relative; padding: 9px 0 9px 22px; border-bottom: 1px solid #151a21; color: #c8d0da; }
+.findings li::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
+.findings b { color: var(--ink); font-weight: 600; }
 footer { margin-top: 56px; color: #5c6572; font-size: 11.5px; display: flex; justify-content: space-between; gap: 20px; }
 `
 
@@ -236,6 +241,136 @@ ${
 ${diffSection}
 <footer>
   <span>generated ${escapeHtml(generatedAt.toISOString().replace('T', ' ').slice(0, 19))} · chars→tokens ${attribution.calibration.tokensPerChar.toFixed(2)} (n=${attribution.calibration.samples}) · ${formatTokens(totals.unattributed)} unattributed</span>
+  <span>offline, single file, no dependencies</span>
+</footer>
+</body>
+</html>`
+}
+
+export interface ScanHtmlOptions {
+  title?: string
+  generatedAt?: Date
+  root?: string
+}
+
+/** Corpus-level page: the same visual language, aggregated over many sessions. */
+export function renderScanHtml(result: ScanResult, options: ScanHtmlOptions = {}): string {
+  const redact = redactor()
+  const totals = result.totals
+  const generatedAt = options.generatedAt ?? new Date()
+  const carriedShare = totals.prompt === 0 ? 0 : totals.carried / totals.prompt
+  const freshShare = totals.prompt === 0 ? 0 : totals.fresh / totals.prompt
+
+  const findings = result.findings
+    .map((finding) => `<li>${escapeHtml(finding)}</li>`)
+    .join('')
+
+  const sessionRows = result.sessions
+    .map(
+      (session) => `<tr>
+  <td class="path mono">${escapeHtml(redact(session.cwd))}</td>
+  <td class="mono num">${formatTokens(session.prompt)}</td>
+  <td class="mono num">${share(session.carried, session.prompt)}</td>
+  <td class="mono num">${session.turns}</td>
+  <td class="mono num">${session.toolCalls}</td>
+  <td class="mono num">${session.cacheMisses > 0 ? session.cacheMisses : '-'}</td>
+</tr>`
+    )
+    .join('')
+
+  const maxTool = Math.max(1, ...result.tools.map((tool) => tool.amplifiedTokens))
+  const toolRows = result.tools
+    .slice(0, 10)
+    .map((tool) =>
+      barRow(
+        tool.name,
+        tool.amplifiedTokens,
+        Math.max(0, tool.amplifiedTokens - tool.freshTokens),
+        tool.freshTokens,
+        maxTool,
+        `${formatTokens(tool.amplifiedTokens)} · ${share(tool.amplifiedTokens, totals.prompt)}`,
+        `${tool.name}: ${tool.calls} calls, ${formatTokens(tool.resultChars)} chars, ${formatTokens(tool.amplifiedTokens)} prompt tokens`
+      )
+    )
+    .join('')
+
+  const repeatRows = result.repeats
+    .slice(0, 8)
+    .map(
+      (repeat) => `<tr>
+  <td class="mono num">${repeat.reads}×</td>
+  <td class="mono num">${repeat.sessions}</td>
+  <td class="mono num">${formatTokens(repeat.chars)}</td>
+  <td class="path mono">${escapeHtml(redact(repeat.path))}</td>
+</tr>`
+    )
+    .join('')
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(options.title ?? 'dsh-trace · corpus scan')}</title>
+<style>${STYLE}</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">dsh-trace</div>
+  <div class="session mono">corpus scan · ${escapeHtml(redact(options.root ?? ''))}</div>
+</header>
+<h1>${totals.sessions} sessions, ${(totals.prompt / 1e6).toFixed(1)}M prompt tokens</h1>
+<div class="sub mono">${totals.turns.toLocaleString()} turns · ${totals.steps.toLocaleString()} steps · ${totals.toolCalls.toLocaleString()} tool calls · ${totals.events.toLocaleString()} events</div>
+
+<div class="stats">
+  ${statCard('prompt tokens', formatTokens(totals.prompt), `${formatTokens(totals.uncached)} billed uncached`)}
+  ${statCard('carried', `${(carriedShare * 100).toFixed(1)}%`, 'context re-sent')}
+  ${statCard('fresh', `${(freshShare * 100).toFixed(1)}%`, `${formatTokens(totals.fresh)} tokens of new content`)}
+  ${statCard('cache misses', String(totals.cacheMisses), `output ${formatTokens(totals.output)} tokens`)}
+</div>
+
+<section>
+  <h2>What the corpus says</h2>
+  <ul class="findings">${findings}</ul>
+</section>
+
+<section>
+  <h2>Cost by tool · prompt tokens attributable, including re-reads</h2>
+  ${toolRows}
+</section>
+
+<section>
+  <h2>Most expensive sessions</h2>
+  <table>
+    <thead><tr><th>workspace</th><th class="num">prompt</th><th class="num">carried</th><th class="num">turns</th><th class="num">calls</th><th class="num">miss</th></tr></thead>
+    <tbody>${sessionRows}</tbody>
+  </table>
+</section>
+
+${
+  result.repeats.length === 0
+    ? ''
+    : `<section>
+  <h2>Most re-read files</h2>
+  <table>
+    <thead><tr><th class="num">reads</th><th class="num">sessions</th><th class="num">chars</th><th>path</th></tr></thead>
+    <tbody>${repeatRows}</tbody>
+  </table>
+</section>`
+}
+
+<section>
+  <h2>Turn cost distribution</h2>
+  <div class="stats" style="grid-template-columns:repeat(4,1fr);margin-top:0">
+    ${statCard('median turn', formatTokens(result.turnPrompt.p50), 'prompt tokens')}
+    ${statCard('p90', formatTokens(result.turnPrompt.p90), 'prompt tokens')}
+    ${statCard('p99', formatTokens(result.turnPrompt.p99), 'prompt tokens')}
+    ${statCard('top 10% of turns', `${(result.concentration * 100).toFixed(1)}%`, 'of all prompt tokens')}
+  </div>
+</section>
+
+<footer>
+  <span>generated ${escapeHtml(generatedAt.toISOString().replace('T', ' ').slice(0, 19))} · ${totals.failed} unreadable sessions · ${totals.skipped} bad lines skipped</span>
   <span>offline, single file, no dependencies</span>
 </footer>
 </body>

@@ -46,9 +46,25 @@ turn  prompt  carried  fresh   steps  peak    miss  top tool
 3     15.78M  15.39M   364.6k    158  154.8k     7  bash 6.66M
 ```
 
-Across 383 local sessions (1,444 turns, 2.15B prompt tokens): **92.4% of what
-the models processed was the same context re-sent, and only 1.1% was new
-content.**
+## Corpus scan
+
+`dsh-trace scan <sessions-dir>` runs the same analysis over every session under a
+directory and reports what keeps happening. On 383 local sessions (1,455 turns,
+2.22B prompt tokens):
+
+![dsh-trace corpus scan](docs/scan.png)
+
+- **98.6% of everything the models processed was context they had already seen**;
+  1.2% was new content.
+- The most expensive **10% of turns produced 68.2%** of all prompt tokens
+  (median turn 260k tokens, p99 21.9M, max 40.1M).
+- 821 cache misses re-billed 117M input tokens at full rate.
+- `bash` output accounts for 39.8% of attributable prompt tokens.
+- The most re-read file was opened 40 times (295k characters).
+
+```sh
+dsh-trace scan ~/.dsh/sessions --html scan.html
+```
 
 ## Requirements
 

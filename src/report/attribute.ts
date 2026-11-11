@@ -157,7 +157,6 @@ export function attributeSession(tape: Tape): SessionAttribution {
 
   const tools = new Map<string, ToolAttribution>()
   const repeatReads = new Map<string, RepeatFinding>()
-  const turns: TurnAttribution[] = []
 
   // Counts come from the call log itself; only the token attribution needs the
   // step walk below. Keeping them separate stops double counting.
@@ -184,6 +183,27 @@ export function attributeSession(tape: Tape): SessionAttribution {
     repeatReads.set(path, existing)
   }
 
+  const calibration = calibrate(tape, assistantChars, callsByStep)
+
+  /**
+   * The chain is session-wide, not per-turn: context is re-sent across turn
+   * boundaries too, so a turn's first request is mostly the previous turn's
+   * history. Measuring carried inside each turn separately made multi-turn
+   * sessions look like they started from nothing every time.
+   */
+  const chain: Array<{ turn: number; step: number; prompt: number; input: number; output: number }> = []
+  for (const turn of tape.turns) {
+    for (const step of turn.steps) {
+      const prompt = promptTokens(step.usage)
+      if (prompt === 0) continue
+      chain.push({ turn: turn.turn, step: step.step, prompt, input: step.usage.inputTokens, output: step.usage.outputTokens })
+    }
+  }
+  chain.sort((a, b) => (a.turn - b.turn) || (a.step - b.step))
+
+  const turns: TurnAttribution[] = []
+  const perTurn = new Map<number, { attribution: TurnAttribution; perTool: Map<string, number> }>()
+
   const totals: AttributionTotals = {
     turns: 0,
     steps: 0,
@@ -198,83 +218,84 @@ export function attributeSession(tape: Tape): SessionAttribution {
     unattributed: 0,
   }
 
-  const calibration = calibrate(tape, assistantChars, callsByStep)
-
-  for (const turn of tape.turns) {
-    const steps = turn.steps
-      .filter((step) => promptTokens(step.usage) > 0)
-      .sort((a, b) => a.step - b.step)
-    if (steps.length === 0) continue
-
-    const attribution: TurnAttribution = {
-      turn: turn.turn,
-      steps: steps.length,
-      prompt: 0,
-      uncached: 0,
-      carried: 0,
-      fresh: 0,
-      evicted: 0,
-      output: 0,
-      peakPrompt: 0,
-      cacheMisses: 0,
-      topTool: null,
-      unattributed: 0,
+  function ensureTurn(turn: number): { attribution: TurnAttribution; perTool: Map<string, number> } {
+    const existing = perTurn.get(turn)
+    if (existing !== undefined) return existing
+    const created = {
+      attribution: {
+        turn,
+        steps: 0,
+        prompt: 0,
+        uncached: 0,
+        carried: 0,
+        fresh: 0,
+        evicted: 0,
+        output: 0,
+        peakPrompt: 0,
+        cacheMisses: 0,
+        topTool: null,
+        unattributed: 0,
+      } as TurnAttribution,
+      perTool: new Map<string, number>(),
     }
-    const perTool = new Map<string, number>()
+    perTurn.set(turn, created)
+    turns.push(created.attribution)
+    return created
+  }
 
-    for (let i = 0; i < steps.length; i++) {
-      const current = steps[i]!
-      const prompt = promptTokens(current.usage)
-      attribution.prompt += prompt
-      attribution.uncached += current.usage.inputTokens
-      attribution.output += current.usage.outputTokens
-      attribution.peakPrompt = Math.max(attribution.peakPrompt, prompt)
-      if (prompt > 20_000 && current.usage.inputTokens > prompt * 0.5) attribution.cacheMisses += 1
+  for (let i = 0; i < chain.length; i++) {
+    const current = chain[i]!
+    const { attribution, perTool } = ensureTurn(current.turn)
+    attribution.steps += 1
+    attribution.prompt += current.prompt
+    attribution.uncached += current.input
+    attribution.output += current.output
+    attribution.peakPrompt = Math.max(attribution.peakPrompt, current.prompt)
+    if (current.prompt > 20_000 && current.input > current.prompt * 0.5) attribution.cacheMisses += 1
 
-      if (i === 0) continue
+    if (i === 0) continue
 
-      const previous = steps[i - 1]!
-      const previousPrompt = promptTokens(previous.usage)
-      attribution.carried += Math.min(prompt, previousPrompt)
-      const delta = prompt - previousPrompt
-      if (delta <= 0) {
-        attribution.evicted += -delta
-        continue
-      }
-      attribution.fresh += delta
-
-      // Whatever was appended after `previous.step` is what inflated the prompt.
-      const key = `${turn.turn}:${previous.step}`
-      const calls = callsByStep.get(key) ?? []
-      const toolChars = calls.reduce((sum, call) => sum + (call.resultChars ?? 0), 0)
-      const messageChars = assistantChars.get(key) ?? 0
-      const totalChars = toolChars + messageChars
-      if (totalChars === 0) {
-        attribution.unattributed += delta
-        continue
-      }
-      const explained = Math.min(delta, totalChars * calibration.tokensPerChar)
-      if (delta > explained) attribution.unattributed += delta - explained
-      const tokensPerChar = explained / totalChars
-      const multiplier = steps.length - i
-
-      for (const call of calls) {
-        const entry = tools.get(call.name)
-        if (entry === undefined) continue
-        const freshTokens = (call.resultChars ?? 0) * tokensPerChar
-        const amplified = freshTokens * multiplier
-        entry.freshTokens += freshTokens
-        entry.amplifiedTokens += amplified
-        perTool.set(call.name, (perTool.get(call.name) ?? 0) + amplified)
-      }
+    const previous = chain[i - 1]!
+    attribution.carried += Math.min(current.prompt, previous.prompt)
+    const delta = current.prompt - previous.prompt
+    if (delta <= 0) {
+      attribution.evicted += -delta
+      continue
     }
+    attribution.fresh += delta
 
+    // Whatever was appended after the previous step is what inflated this one.
+    const key = `${previous.turn}:${previous.step}`
+    const calls = callsByStep.get(key) ?? []
+    const toolChars = calls.reduce((sum, call) => sum + (call.resultChars ?? 0), 0)
+    const messageChars = assistantChars.get(key) ?? 0
+    const totalChars = toolChars + messageChars
+    if (totalChars === 0) {
+      attribution.unattributed += delta
+      continue
+    }
+    const explained = Math.min(delta, totalChars * calibration.tokensPerChar)
+    if (delta > explained) attribution.unattributed += delta - explained
+    const tokensPerChar = explained / totalChars
+    // Content appended after step k stays in the context until the session ends.
+    const multiplier = chain.length - i
+
+    for (const call of calls) {
+      const entry = tools.get(call.name)
+      if (entry === undefined) continue
+      const freshTokens = (call.resultChars ?? 0) * tokensPerChar
+      const amplified = freshTokens * multiplier
+      entry.freshTokens += freshTokens
+      entry.amplifiedTokens += amplified
+      perTool.set(call.name, (perTool.get(call.name) ?? 0) + amplified)
+    }
+  }
+
+  for (const { attribution, perTool } of perTurn.values()) {
     if (perTool.size > 0) {
       const [name, amplified] = [...perTool.entries()].sort((a, b) => b[1] - a[1])[0]!
       attribution.topTool = { name, amplified }
     }
-
-    turns.push(attribution)
     totals.turns += 1
     totals.steps += attribution.steps
     totals.prompt += attribution.prompt

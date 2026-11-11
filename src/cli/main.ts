@@ -12,7 +12,8 @@ import type { Tape } from '../model/tape.ts'
 import { attributeSession, formatTokens, share } from '../report/attribute.ts'
 import type { SessionAttribution } from '../report/attribute.ts'
 import { diffTapes } from '../report/diff.ts'
-import { renderHtml } from '../report/html.ts'
+import { renderHtml, renderScanHtml } from '../report/html.ts'
+import { scan } from '../report/scan.ts'
 import type { CallRef, DiffOp, DiffResult } from '../report/diff.ts'
 
 const USAGE = `dsh-trace — offline trace for DeepSeek Harness agent sessions
@@ -22,6 +23,7 @@ Usage:
   dsh-trace report <session.jsonl.zstd> [--json] [--turns N] [--tools N]
   dsh-trace diff <a.jsonl.zstd> <b.jsonl.zstd> [--json] [--limit N]
   dsh-trace html <session.jsonl.zstd> [-o report.html] [--diff <other.jsonl.zstd>]
+  dsh-trace scan <sessions-dir> [--json] [--html scan.html] [--top N]
 
 Options:
   --json     print machine-readable output
@@ -30,6 +32,8 @@ Options:
   --tools N  how many tools to list (default 10)
   --limit N  how many divergences to list (default 10)
   -o PATH    where to write the HTML report (default dsh-trace-report.html)
+  --html P   write the scan summary page to P
+  --top N    rows to show in tables (default 10)
 `
 
 function pad(value: string, width: number): string {
@@ -238,7 +242,7 @@ export async function main(argv: string[]): Promise<number> {
     process.stdout.write(USAGE)
     return command === undefined ? 2 : 0
   }
-  if (command !== 'ingest' && command !== 'report' && command !== 'diff' && command !== 'html') {
+  if (command !== 'ingest' && command !== 'report' && command !== 'diff' && command !== 'html' && command !== 'scan') {
     process.stderr.write(`unknown command: ${command}\n\n${USAGE}`)
     return 2
   }
@@ -256,6 +260,72 @@ export async function main(argv: string[]): Promise<number> {
   if (path === undefined) {
     process.stderr.write(`missing session path\n\n${USAGE}`)
     return 2
+  }
+
+  if (command === 'scan') {
+    const htmlIndex = rest.indexOf('--html')
+    const htmlFile = htmlIndex >= 0 ? rest[htmlIndex + 1] : undefined
+    const consumed = new Set<number>()
+    if (htmlIndex >= 0) {
+      consumed.add(htmlIndex)
+      consumed.add(htmlIndex + 1)
+    }
+    for (const flag of ['--top', '--concurrency']) {
+      const index = rest.indexOf(flag)
+      if (index >= 0) {
+        consumed.add(index)
+        consumed.add(index + 1)
+      }
+    }
+    const positional = rest.filter((arg, index) => !arg.startsWith('-') && !consumed.has(index))
+    const root = positional[0]
+    if (root === undefined) {
+      process.stderr.write(`scan needs a directory\n\n${USAGE}`)
+      return 2
+    }
+    try {
+      const result = await scan(root, { top: numberArg('--top', 10), concurrency: numberArg('--concurrency', 4) })
+      if (json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
+        return 0
+      }
+      const totals = result.totals
+      process.stdout.write(
+        `${totals.sessions} sessions${totals.failed > 0 ? ` (${totals.failed} unreadable)` : ''}` +
+          ` · ${formatTokens(totals.prompt)} prompt · ${share(totals.carried, totals.prompt)} carried` +
+          ` · ${formatTokens(totals.fresh)} fresh · ${totals.cacheMisses} cache misses` +
+          ` · ${totals.toolCalls} tool calls\n\n`
+      )
+      process.stdout.write(`what the corpus says:\n`)
+      for (const finding of result.findings) process.stdout.write(`  → ${finding}\n`)
+      process.stdout.write('\n')
+      const toolRows = result.tools.slice(0, 8).map((tool) => [
+        tool.name,
+        String(tool.calls),
+        formatTokens(tool.resultChars),
+        formatTokens(tool.amplifiedTokens),
+        share(tool.amplifiedTokens, totals.prompt),
+      ])
+      process.stdout.write(`${renderGrid(['tool', 'calls', 'chars', 'attributed', 'of prompt'], toolRows, new Set([1]))}\n\n`)
+      const sessionRows = result.sessions.slice(0, 8).map((session) => [
+        formatTokens(session.prompt),
+        share(session.carried, session.prompt),
+        String(session.turns),
+        String(session.toolCalls),
+        String(session.cacheMisses),
+        session.cwd,
+      ])
+      process.stdout.write(`${renderGrid(['prompt', 'carried', 'turns', 'calls', 'miss', 'workspace'], sessionRows, new Set([0, 2, 3, 4]))}\n`)
+      if (htmlFile !== undefined) {
+        const html = renderScanHtml(result, { root })
+        await writeFile(htmlFile, html, 'utf8')
+        process.stdout.write(`\n${htmlFile}  (${(html.length / 1024).toFixed(1)} kB)\n`)
+      }
+      return 0
+    } catch (error) {
+      process.stderr.write(`${(error as Error).message}\n`)
+      return 1
+    }
   }
 
   if (command === 'html') {
