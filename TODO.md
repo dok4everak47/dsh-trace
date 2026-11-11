@@ -53,6 +53,9 @@
 - **D-006 归因口径改用 prompt token（uncached + cacheRead），不做五分类。** 原计划按 system / 指令 / skills / 历史 / 工具结果拆分，实测不可行：v4 的 `request/header` 根本不含 system prompt，而 `inputTokens` 只是未命中缓存的那一小片——直接拿它当上下文大小，会在缓存未命中的那一步凭空造出几十万 token 的跳变（第一版报告因此把 bash 算成 557%）。改成：`prompt = inputTokens + cacheReadTokens`，每步价格分解为 carried（重发）+ fresh（新增），fresh 再按字符比例归到工具与 assistant 消息，解释不了的计入 unattributed。
 - **D-007 diff 按工具名对齐，不按参数 hash 对齐。** 原计划用"工具名 + 参数 hash"当对齐键，实测在真实会话对上几乎全不匹配——同一任务两次运行连 `ls -la` 的参数都会变（绝对路径、`head -80`/`head -100`、描述文本）。改成按工具名做 LCS，再逐对比较规范化参数，输出 identical / drifted / a-only / b-only 三级。易变字段（description / timeout）在比较前剔除。
 
+- **D-008 砍掉回放，HTML 提前。** 归因已经给出主故事；回放在真实语料上只能回答"文件还在不在、内容变没变"，信息量远低于 diff。故事收敛为 "trace + attribute + diff"，少一层噱头，多一层能用。
+- **D-009 报告里家目录一律脱敏成 `~`。** 报告是拿出去分享的产物，路径里不该带用户名。生成时替换，不改源数据。
+
 ## 待定
 
 - fixture 脱敏做成 `just redact` 还是保持手工？

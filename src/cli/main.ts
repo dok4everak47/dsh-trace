@@ -4,6 +4,7 @@
  * and `diff` land on D2–D4 and plug in here.
  */
 
+import { writeFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 
 import { readSession } from '../ingest/read.ts'
@@ -11,6 +12,7 @@ import type { Tape } from '../model/tape.ts'
 import { attributeSession, formatTokens, share } from '../report/attribute.ts'
 import type { SessionAttribution } from '../report/attribute.ts'
 import { diffTapes } from '../report/diff.ts'
+import { renderHtml } from '../report/html.ts'
 import type { CallRef, DiffOp, DiffResult } from '../report/diff.ts'
 
 const USAGE = `dsh-trace — offline trace for DeepSeek Harness agent sessions
@@ -19,6 +21,7 @@ Usage:
   dsh-trace ingest <session.jsonl.zstd> [--json] [--quiet]
   dsh-trace report <session.jsonl.zstd> [--json] [--turns N] [--tools N]
   dsh-trace diff <a.jsonl.zstd> <b.jsonl.zstd> [--json] [--limit N]
+  dsh-trace html <session.jsonl.zstd> [-o report.html] [--diff <other.jsonl.zstd>]
 
 Options:
   --json     print machine-readable output
@@ -26,6 +29,7 @@ Options:
   --turns N  how many turns to list (default 10)
   --tools N  how many tools to list (default 10)
   --limit N  how many divergences to list (default 10)
+  -o PATH    where to write the HTML report (default dsh-trace-report.html)
 `
 
 function pad(value: string, width: number): string {
@@ -234,7 +238,7 @@ export async function main(argv: string[]): Promise<number> {
     process.stdout.write(USAGE)
     return command === undefined ? 2 : 0
   }
-  if (command !== 'ingest' && command !== 'report' && command !== 'diff') {
+  if (command !== 'ingest' && command !== 'report' && command !== 'diff' && command !== 'html') {
     process.stderr.write(`unknown command: ${command}\n\n${USAGE}`)
     return 2
   }
@@ -252,6 +256,41 @@ export async function main(argv: string[]): Promise<number> {
   if (path === undefined) {
     process.stderr.write(`missing session path\n\n${USAGE}`)
     return 2
+  }
+
+  if (command === 'html') {
+    const outIndex = rest.findIndex((arg) => arg === '-o' || arg === '--out')
+    const outFile = outIndex >= 0 ? rest[outIndex + 1] : undefined
+    const diffIndex = rest.indexOf('--diff')
+    const diffFile = diffIndex >= 0 ? rest[diffIndex + 1] : undefined
+    const consumed = new Set<number>()
+    if (outIndex >= 0) {
+      consumed.add(outIndex)
+      consumed.add(outIndex + 1)
+    }
+    if (diffIndex >= 0) {
+      consumed.add(diffIndex)
+      consumed.add(diffIndex + 1)
+    }
+    const positional = rest.filter((arg, index) => !arg.startsWith('-') && !consumed.has(index))
+    const sessionPath = positional[0]
+    if (sessionPath === undefined) {
+      process.stderr.write(`html needs a session path\n\n${USAGE}`)
+      return 2
+    }
+    try {
+      const tape = await readSession(sessionPath)
+      const attribution = attributeSession(tape)
+      const second = diffFile === undefined ? null : await readSession(diffFile)
+      const html = renderHtml(tape, attribution, { diff: second === null ? null : diffTapes(tape, second) })
+      const target = outFile ?? 'dsh-trace-report.html'
+      await writeFile(target, html, 'utf8')
+      process.stdout.write(`${target}  (${(html.length / 1024).toFixed(1)} kB)\n`)
+      return 0
+    } catch (error) {
+      process.stderr.write(`${(error as Error).message}\n`)
+      return 1
+    }
   }
 
   if (command === 'diff') {

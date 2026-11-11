@@ -2,6 +2,8 @@
 
 Offline trace, replay and diff for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) agent sessions.
 
+![dsh-trace report](docs/report.png)
+
 A DSH session is a compressed, append-only event log (`session.jsonl.zstd`, thousands of events per conversation). It holds everything that actually happened — every tool call, every tool result, every streamed reasoning chunk — and nothing reads it in full. `dsh-trace` turns that log into something you can inspect:
 
 - **ingest** — decompress and normalize a session into a flat, versioned *tape*
@@ -26,7 +28,11 @@ pnpm build
 pnpm dsh-trace ingest ~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd
 pnpm dsh-trace report ~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd
 pnpm dsh-trace diff <a.jsonl.zstd> <b.jsonl.zstd>
+pnpm dsh-trace html <session.jsonl.zstd> -o report.html [--diff <other.jsonl.zstd>]
 ```
+
+`html` writes one self-contained file — no scripts, no external requests, opens
+offline. It is the artifact meant to be shared: the screenshot above is one.
 
 `report` answers the only question that matters about an expensive session: how
 much of what the model processed was the same context being re-sent, and which

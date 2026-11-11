@@ -45,14 +45,20 @@
 
 ---
 
-## D4（11-14）回放（可选）+ HTML 骨架
+## D4（11-14）HTML 报告　✅ 提前完成（11-13 当天）
 
-- [ ] `src/replay/classify.ts`：只读工具分类表（read/glob/grep = replayable，其余 not）
-- [ ] `src/replay/verify.ts`：重放读类工具，比较记录结果与当前文件系统
-- [ ] divergence 原因分类：文件已改 / 文件已删 / 路径不存在 / 结果被截断
-- [ ] 起 `src/report/html.ts` 骨架（先把数据接进去，样式 D5 做）
+> 计划调整：回放砍掉（理由见 TODO D-008），这一天直接做 HTML，而且一次做到了可用状态，不只是骨架。
 
-**砍线**：D4 中午前回放还没有稳定判定，就整个砍掉，把这一天全部给 HTML。故事从"trace + replay + diff"降级为"trace + diff"，仍然完整。
+- [x] `src/report/html.ts`：单文件、零脚本、零外链，纯 CSS 条形图
+- [x] 归因视图：prompt 总量 / carried·fresh 占比 / 缓存未命中，逐 turn 条形图
+- [x] 工具成本条形图（含重读放大）+ 重复读取表
+- [x] diff 视图：matched / identical / drifted / a-only / b-only
+- [x] 首页 cwd 中的家目录自动脱敏为 `~`（报告要能发出去）
+- [x] `dsh-trace html <session> [-o out.html] [--diff <other>]`
+- [x] 无头 Chrome 截图验证（`docs/report.png` 即真实产物）
+- [x] 5 个新用例：自包含、转义、脱敏、重复读取、diff 视图
+
+**完成标准**：断网打开正常，一张截图能让人看懂发生了什么。
 
 ---
 
@@ -96,7 +102,7 @@
 - D1：完成。全量 383 份跑通（0 失败、0 坏行、289,334 事件、3.4s、RSS 236MB）；v0/v3/v4 抽样 turn 数与 `turn/start` 全部一致（72/72、3/3、0/0）。最大单份 7,572 事件 291ms。发现两套 schema 差异：v4 的 usage 在 `assistant/message.data.usage`、tool 结果文本直接挂在 content item 上、header 不含 system prompt（改由 `request/context` 给 provider/model/contextWindow）。
 - D2：完成。全量 1,444 个 turn 守恒校验 0 不匹配（first + carried + fresh == prompt）。语料合计 prompt 21.5 亿 token，其中 carried 92.4%、fresh 1.1%、uncached 5.4%；817 次缓存未命中，335 个文件被重复读取。手工复核 2 份会话 5 个 turn，与工具输出逐项一致。
 - D3：完成（提前一天）。diff 落地，7 个新用例，真实会话对验证通过；发现"同一任务两次运行"在语料里极少完全同参，按工具名的 LCS 对齐是唯一稳的粒度。
-- D4：
+- D4：完成（提前）。HTML 一次做到可用，32 个测试全绿；用 Chrome for Testing 无头截图逐轮修正了对比度、条形分层和转义 bug。
 - D5：
 - D6：
 - D7：
