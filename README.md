@@ -1,5 +1,8 @@
 # dsh-trace
 
+[![npm](https://img.shields.io/npm/v/dsh-tracer?color=CB3837)](https://www.npmjs.com/package/dsh-tracer)
+[![license](https://img.shields.io/badge/license-MIT-3366CC)](#license)
+
 Offline trace, cost attribution and diff for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) agent sessions.
 
 ![dsh-trace report](docs/report.png)

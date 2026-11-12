@@ -90,7 +90,7 @@
 - [x] 干净安装验证：`npm pack` → 临时目录 `npm i <tgz>` → ingest / report / html 全通
 - [x] `npm publish --dry-run`：41 kB、27 个文件、无告警
 - [x] git tag `v0.1.0`
-- [ ] **真实发布未做**：本机 npm 未登录（`npm whoami` 401），需要 `npm login` 后执行 `npm publish`
+- [x] **已发布**：`dsh-tracer@0.1.0`（命令仍叫 `dsh-trace`）。原定包名 `dsh-trace` 被 npm 的仿冒保护 403 拦下——与 Datadog 的 `dd-trace` 过于相似。改发 `dsh-tracer` 后一次通过；发布后注册表先显示占位版本 `0.0.0-stage`，约一分钟后才提升为 0.1.0。
 
 **顺手修掉的两个发版 bug**：① 入口判断用 `import.meta.url === pathToFileURL(argv[1])`，而 npm 把 bin 装成软链、macOS 的 `/tmp` 也是软链，导致 CLI 静默退出 0 —— 改成 realpath 比较，并加回归测试；② 输出接 `| head` 时 EPIPE 直接崩，改成正常退出。
 
