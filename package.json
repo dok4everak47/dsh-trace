@@ -1,6 +1,6 @@
 {
   "name": "dsh-tracer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Offline trace, cost attribution and diff for DeepSeek Harness agent sessions",
   "type": "module",
   "license": "MIT",
