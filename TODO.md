@@ -45,7 +45,7 @@
 
 ## 决策记录
 
-- **D-001 名字 `dsh-trace`。** `dsh-tape` 在 npm 上已被占：2026-09-10 有人以 "name reserved; first release in development" 抢注，撞了同一个概念。`dsh-trace` 可用、直白、搜得到。
+- **D-001 名字 `dsh-trace`（npm 包名 `dsh-tracer`）。** 首次 `npm publish` 被 403 拒绝：`dsh-trace` 与 Datadog 的 `dd-trace` 过于相似，npm 的仿冒保护直接拦下，也只能改成 `@scope/dsh-trace` 那种形式。改发未占用的 `dsh-tracer`，**命令仍然是 `dsh-trace`**（bin 名不变），文档与文章里的命令不用改。原记录 → `dsh-tape` 在 npm 上已被占：2026-09-10 有人以 "name reserved; first release in development" 抢注，撞了同一个概念。`dsh-trace` 可用、直白、搜得到。
 - **D-002 语料用本机 383 份真实会话。** 只进统计和脱敏 fixture，原始日志永不入库。
 - **D-003 zstd 用 `node:zlib` 内置。** 零 native 依赖；代价是 Node ≥ 24，写进 `engines`。
 - **D-004 归一化唯一入口 `src/model/`。** 其他模块只见 tape 类型，防止 schema 变更污染全仓。

@@ -27,8 +27,11 @@ Across 383 local sessions (1,457 turns, 2.26B prompt tokens processed — corpus
 ## Install
 
 ```sh
-npm i -g dsh-trace     # Node >= 24
+npm i -g dsh-tracer    # Node >= 24 — installs the `dsh-trace` command
 ```
+
+The package is `dsh-tracer` because npm refuses `dsh-trace` as too similar to
+`dd-trace`; the command it installs is still `dsh-trace`.
 
 Node 24 is not a preference: zstd decompression uses the built-in `node:zlib`
 (`zstdDecompressSync`, Node ≥ 23.8), which keeps the package at **zero runtime
