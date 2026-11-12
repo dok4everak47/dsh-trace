@@ -15,6 +15,8 @@ import type { SessionAttribution } from '../report/attribute.ts'
 import { diffTapes } from '../report/diff.ts'
 import { renderHtml, renderScanHtml } from '../report/html.ts'
 import { scan } from '../report/scan.ts'
+import { compareGroups } from '../report/compare.ts'
+import type { CompareResult } from '../report/compare.ts'
 import type { CallRef, DiffOp, DiffResult } from '../report/diff.ts'
 
 const USAGE = `dsh-trace — offline trace for DeepSeek Harness agent sessions
@@ -25,6 +27,7 @@ Usage:
   dsh-trace diff <a.jsonl.zstd> <b.jsonl.zstd> [--json] [--limit N]
   dsh-trace html <session.jsonl.zstd> [-o report.html] [--diff <other.jsonl.zstd>]
   dsh-trace scan <sessions-dir> [--json] [--html scan.html] [--top N]
+  dsh-trace compare <a-dir|file> <b-dir|file> [--json] [--label-a X] [--label-b Y]
 
 Options:
   --json     print machine-readable output
@@ -35,6 +38,8 @@ Options:
   -o PATH    where to write the HTML report (default dsh-trace-report.html)
   --html P   write the scan summary page to P
   --top N    rows to show in tables (default 10)
+  --label-a  name for the first group in compare
+  --label-b  name for the second group in compare
 `
 
 function pad(value: string, width: number): string {
@@ -237,13 +242,51 @@ export function renderDiff(result: DiffResult): string {
   return out.join('\n')
 }
 
+function formatDelta(metric: CompareResult['metrics'][number]): string {
+  const sign = metric.kind === 'share' ? (metric.delta >= 0 ? '+' : '') : metric.delta >= 0 ? '+' : ''
+  if (metric.kind === 'share') return `${sign}${(metric.delta * 100).toFixed(1)} pp`
+  return `${sign}${(metric.delta * 100).toFixed(1)}%`
+}
+
+function formatMetric(metric: CompareResult['metrics'][number], value: number): string {
+  if (metric.kind === 'share') return `${(value * 100).toFixed(1)}%`
+  if (metric.key === 'cache misses / session') return value.toFixed(1)
+  return formatTokens(value)
+}
+
+export function renderCompare(result: CompareResult): string {
+  const out: string[] = []
+  out.push(
+    `${result.a.label}: ${result.a.sessions} sessions / ${result.a.turns} turns` +
+      `   ${result.b.label}: ${result.b.sessions} sessions / ${result.b.turns} turns`
+  )
+  out.push('')
+  const rows = result.metrics.map((metric) => [
+    metric.key,
+    formatMetric(metric, metric.a),
+    formatMetric(metric, metric.b),
+    formatDelta(metric),
+  ])
+  out.push(renderGrid(['metric', result.a.label, result.b.label, 'change'], rows, new Set([1, 2, 3])))
+  out.push('')
+  const toolRows = result.tools.map((tool) => [
+    tool.name,
+    `${(tool.aShare * 100).toFixed(1)}%`,
+    `${(tool.bShare * 100).toFixed(1)}%`,
+    `${((tool.bShare - tool.aShare) * 100).toFixed(1)} pp`,
+  ])
+  out.push(renderGrid(['tool', result.a.label, result.b.label, 'change'], toolRows, new Set([1, 2, 3])))
+  return out.join('\n')
+}
+
 export async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv
   if (command === undefined || command === '--help' || command === '-h' || command === 'help') {
     process.stdout.write(USAGE)
     return command === undefined ? 2 : 0
   }
-  if (command !== 'ingest' && command !== 'report' && command !== 'diff' && command !== 'html' && command !== 'scan') {
+  const known = ['ingest', 'report', 'diff', 'html', 'scan', 'compare']
+  if (!known.includes(command)) {
     process.stderr.write(`unknown command: ${command}\n\n${USAGE}`)
     return 2
   }
@@ -261,6 +304,41 @@ export async function main(argv: string[]): Promise<number> {
   if (path === undefined) {
     process.stderr.write(`missing session path\n\n${USAGE}`)
     return 2
+  }
+
+  if (command === 'compare') {
+    const labelAIndex = rest.indexOf('--label-a')
+    const labelBIndex = rest.indexOf('--label-b')
+    const consumed = new Set<number>()
+    for (const index of [labelAIndex, labelBIndex]) {
+      if (index >= 0) {
+        consumed.add(index)
+        consumed.add(index + 1)
+      }
+    }
+    const positional = rest.filter((arg, index) => !arg.startsWith('-') && !consumed.has(index))
+    const [first, second] = positional
+    if (first === undefined || second === undefined) {
+      process.stderr.write(`compare needs two paths\n\n${USAGE}`)
+      return 2
+    }
+    try {
+      const result = await compareGroups(first, second, {
+        labels: {
+          a: labelAIndex >= 0 ? (rest[labelAIndex + 1] ?? 'before') : 'before',
+          b: labelBIndex >= 0 ? (rest[labelBIndex + 1] ?? 'after') : 'after',
+        },
+      })
+      if (json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
+        return 0
+      }
+      process.stdout.write(`${renderCompare(result)}\n`)
+      return 0
+    } catch (error) {
+      process.stderr.write(`${(error as Error).message}\n`)
+      return 1
+    }
   }
 
   if (command === 'scan') {

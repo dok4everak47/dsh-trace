@@ -86,7 +86,7 @@ function schemaRank(name: string): number {
   return 1
 }
 
-async function findSessionFiles(root: string): Promise<string[]> {
+export async function findSessionFiles(root: string): Promise<string[]> {
   const byDirectory = new Map<string, string>()
   async function walk(directory: string): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true })
@@ -156,10 +156,35 @@ function buildFindings(result: Omit<ScanResult, 'findings'>): string[] {
   return findings
 }
 
+/** Read every session under a path; a single file is a group of one. */
+export async function readGroup(path: string, options: { concurrency?: number } = {}): Promise<Array<Tape | null>> {
+  const { stat } = await import('node:fs/promises')
+  const info = await stat(path)
+  if (info.isFile()) {
+    try {
+      return [await readSession(path)]
+    } catch {
+      return [null]
+    }
+  }
+  const files = await findSessionFiles(path)
+  const tapes = await mapLimit(files, options.concurrency ?? 4, async (file) => {
+    try {
+      return await readSession(file)
+    } catch {
+      return null
+    }
+  })
+  return tapes
+}
+
 export async function scan(root: string, options: { concurrency?: number; top?: number } = {}): Promise<ScanResult> {
-  const files = await findSessionFiles(root)
+  const tapes = await readGroup(root, { concurrency: options.concurrency })
+  return aggregate(tapes, options)
+}
+
+export function aggregate(tapes: Array<Tape | null>, options: { top?: number } = {}): ScanResult {
   const top = options.top ?? 10
-  const concurrency = options.concurrency ?? 4
 
   const totals: ScanTotals = {
     sessions: 0,
@@ -182,15 +207,7 @@ export async function scan(root: string, options: { concurrency?: number; top?: 
   const rows: ScanSessionRow[] = []
   const turnPrompts: number[] = []
 
-  const tapes = await mapLimit(files, concurrency, async (path) => {
-    try {
-      return { path, tape: await readSession(path) }
-    } catch {
-      return { path, tape: null }
-    }
-  })
-
-  for (const { tape } of tapes) {
+  for (const tape of tapes) {
     if (tape === null) {
       totals.failed += 1
       continue

@@ -13,6 +13,7 @@ A DSH session is a zstd-compressed, append-only event log — thousands of event
 - **report** — decompose each request's prompt tokens into context re-sent (`carried`) versus new content (`fresh`), and attribute the new content back to the tool that produced it
 - **diff** — align two runs of the same task on the tool-call sequence, separating a different plan from the same plan with different arguments
 - **scan** — run all of the above over a whole corpus and report what keeps happening
+- **compare** — diff two *groups* of runs (before/after a change) on the metrics that actually move
 - **html** — one self-contained page per session or corpus, no scripts, no network
 
 ## What it found
@@ -51,10 +52,19 @@ dsh-trace ingest ~/.dsh/sessions/<workspace>/<session>/session.v4.jsonl.zstd
 dsh-trace report ~/.dsh/sessions/<workspace>/<session>/session.v4.jsonl.zstd
 dsh-trace diff   <a.jsonl.zstd> <b.jsonl.zstd>
 dsh-trace scan   ~/.dsh/sessions --html scan.html
+dsh-trace compare <before-dir> <after-dir> [--label-a before --label-b after]
 dsh-trace html   <session.jsonl.zstd> -o report.html [--diff <other>]
 ```
 
 Every command takes `--json` where a machine-readable form makes sense.
+
+`compare` is the one to reach for when you change how the agent is driven — clamp
+tool output, stop reading whole files, stop churning the system prompt — and want
+to know whether it worked. It reports prompt tokens per session, carried and
+fresh shares, cache misses per session, median turn size and top-10%
+concentration, plus per-tool share for both groups. Everything is normalized per
+session: two groups of different sizes are otherwise not comparable.
+
 
 ## How the numbers are made
 

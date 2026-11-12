@@ -20,7 +20,8 @@
     "typecheck": "tsc -p tsconfig.check.json",
     "test": "node --test test/*.test.ts",
     "dev": "node src/cli/main.ts",
-    "prepublishOnly": "pnpm build && pnpm test"
+    "prepublishOnly": "pnpm build && pnpm test",
+    "article": "node scripts/build-article.mjs --embed"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
