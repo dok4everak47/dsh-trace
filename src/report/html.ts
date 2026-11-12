@@ -266,7 +266,7 @@ export function renderScanHtml(result: ScanResult, options: ScanHtmlOptions = {}
   const freshShare = totals.prompt === 0 ? 0 : totals.fresh / totals.prompt
 
   const findings = result.findings
-    .map((finding) => `<li>${escapeHtml(finding)}</li>`)
+    .map((finding) => `<li>${escapeHtml(redact(finding))}</li>`)
     .join('')
 
   const sessionRows = result.sessions

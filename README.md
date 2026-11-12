@@ -17,15 +17,19 @@ A DSH session is a zstd-compressed, append-only event log — thousands of event
 
 ## What it found
 
-Across 383 local sessions (1,457 turns, 2.26B prompt tokens processed — corpus as of 2026-11-11, and still growing):
+Across 386 local sessions (1,499 turns, 2.38B prompt tokens processed — corpus snapshot, 2026-11-12):
 
 ![dsh-trace corpus scan](docs/scan.png)
 
 - **98.6% of everything the models processed was context they had already seen**; 1.2% was new content.
-- The most expensive **10% of turns produced 68.2%** of all prompt tokens — median turn 260k tokens, p99 21.9M, max 40.1M.
-- 821 cache misses re-billed 118M input tokens at full rate.
-- `bash` output accounts for 39.6% of attributable prompt tokens.
+- The most expensive **10% of turns produced 67.5%** of all prompt tokens — median turn 274k tokens, p99 22.8M, max 40.1M.
+- 825 cache misses re-billed 119.5M input tokens at full rate.
+- `bash` output accounts for 39.0% of attributable prompt tokens.
 - The most re-read file was opened 40 times (295k characters).
+
+The scan above was run against a frozen copy of the corpus so the committed
+screenshot and the numbers in this README agree. Re-running on a live corpus
+gives slightly larger totals — which is itself the point.
 
 ## Install
 
